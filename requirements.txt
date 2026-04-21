@@ -1,4 +1,4 @@
-gradio>=4.44
+gradio>=5.0
 SpeechRecognition>=3.10
 deep-translator>=1.11
 gTTS>=2.5
