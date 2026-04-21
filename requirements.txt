@@ -1,4 +1,5 @@
 gradio>=5.0
-SpeechRecognition>=3.10
+transformers>=4.40
+torch
 deep-translator>=1.11
 gTTS>=2.5

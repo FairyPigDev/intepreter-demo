@@ -1,64 +1,69 @@
-"""Two-way voice interpreter (Gradio, for Hugging Face Spaces).
+"""Two-way voice interpreter (Gradio, Hugging Face Spaces).
 
-Person A speaks in language A -> app speaks translation in language B.
-Person B speaks in language B -> app speaks translation in language A.
+All services free, no API keys:
+  - STT:       OpenAI Whisper (runs locally via `transformers`)
+  - Translate: deep-translator (Google public endpoint)
+  - TTS:       gTTS (Google public endpoint)
 
-Free services, no API keys:
-  - Google Web Speech via SpeechRecognition (STT)
-  - Google Translate via deep-translator
-  - Google Text-to-Speech via gTTS
+Whisper runs inside the Space, so there are no IP-based blocks or rate
+limits on speech recognition.
 """
 
 import tempfile
 
 import gradio as gr
-import speech_recognition as sr
 from deep_translator import GoogleTranslator
 from gtts import gTTS
+from transformers import pipeline
 
 
-# name -> (STT BCP-47 code, translate code, gTTS code)
+# name -> (Whisper code, deep-translator code, gTTS code)
 LANGUAGES = {
-    "English":    {"stt": "en-US", "tx": "en",    "tts": "en"},
-    "Korean":     {"stt": "ko-KR", "tx": "ko",    "tts": "ko"},
-    "Japanese":   {"stt": "ja-JP", "tx": "ja",    "tts": "ja"},
-    "Chinese":    {"stt": "zh-CN", "tx": "zh-CN", "tts": "zh-CN"},
-    "Spanish":    {"stt": "es-ES", "tx": "es",    "tts": "es"},
-    "French":     {"stt": "fr-FR", "tx": "fr",    "tts": "fr"},
-    "German":     {"stt": "de-DE", "tx": "de",    "tts": "de"},
-    "Italian":    {"stt": "it-IT", "tx": "it",    "tts": "it"},
-    "Portuguese": {"stt": "pt-BR", "tx": "pt",    "tts": "pt"},
-    "Russian":    {"stt": "ru-RU", "tx": "ru",    "tts": "ru"},
-    "Vietnamese": {"stt": "vi-VN", "tx": "vi",    "tts": "vi"},
-    "Thai":       {"stt": "th-TH", "tx": "th",    "tts": "th"},
-    "Hindi":      {"stt": "hi-IN", "tx": "hi",    "tts": "hi"},
-    "Arabic":     {"stt": "ar-SA", "tx": "ar",    "tts": "ar"},
+    "English":    {"whisper": "en", "tx": "en",    "tts": "en"},
+    "Korean":     {"whisper": "ko", "tx": "ko",    "tts": "ko"},
+    "Japanese":   {"whisper": "ja", "tx": "ja",    "tts": "ja"},
+    "Chinese":    {"whisper": "zh", "tx": "zh-CN", "tts": "zh-CN"},
+    "Spanish":    {"whisper": "es", "tx": "es",    "tts": "es"},
+    "French":     {"whisper": "fr", "tx": "fr",    "tts": "fr"},
+    "German":     {"whisper": "de", "tx": "de",    "tts": "de"},
+    "Italian":    {"whisper": "it", "tx": "it",    "tts": "it"},
+    "Portuguese": {"whisper": "pt", "tx": "pt",    "tts": "pt"},
+    "Russian":    {"whisper": "ru", "tx": "ru",    "tts": "ru"},
+    "Vietnamese": {"whisper": "vi", "tx": "vi",    "tts": "vi"},
+    "Thai":       {"whisper": "th", "tx": "th",    "tts": "th"},
+    "Hindi":      {"whisper": "hi", "tx": "hi",    "tts": "hi"},
+    "Arabic":     {"whisper": "ar", "tx": "ar",    "tts": "ar"},
 }
 
 LANG_NAMES = list(LANGUAGES.keys())
-recognizer = sr.Recognizer()
+
+# Load the ASR pipeline once at startup. whisper-small is a good quality
+# / speed trade-off on CPU (~240 MB, ~5-10s for a short utterance).
+asr = pipeline(
+    "automatic-speech-recognition",
+    model="openai/whisper-small",
+    chunk_length_s=30,
+)
 
 
 def interpret(audio_path, source_name, target_name):
     if audio_path is None:
         return "", "", None
     if source_name not in LANGUAGES or target_name not in LANGUAGES:
-        return "(invalid language)", "", None
+        return "(invalid language selection)", "", None
 
     src = LANGUAGES[source_name]
     dst = LANGUAGES[target_name]
 
-    with sr.AudioFile(audio_path) as source:
-        audio = recognizer.record(source)
-
     try:
-        heard = recognizer.recognize_google(audio, language=src["stt"])
-    except sr.UnknownValueError:
-        return "(couldn't understand the audio)", "", None
-    except sr.RequestError as exc:
-        return f"(speech API error: {exc})", "", None
+        result = asr(
+            audio_path,
+            generate_kwargs={"language": src["whisper"], "task": "transcribe"},
+        )
+        heard = (result.get("text") or "").strip()
+    except Exception as exc:
+        return f"(speech recognition failed: {exc})", "", None
 
-    heard = (heard or "").strip()
     if not heard:
         return "(no speech detected)", "", None
 
@@ -75,13 +80,20 @@ def interpret(audio_path, source_name, target_name):
 
     tmp = tempfile.NamedTemporaryFile(suffix=".mp3", delete=False)
     tmp.close()
-    gTTS(text=translated, lang=dst["tts"]).save(tmp.name)
+    try:
+        gTTS(text=translated, lang=dst["tts"]).save(tmp.name)
+    except Exception as exc:
+        return heard, translated, None
 
     return heard, translated, tmp.name
 
 
 with gr.Blocks(title="Interpreter", theme=gr.themes.Soft()) as demo:
-    gr.Markdown("# 🎤 Interpreter\nTwo-way voice translation.")
+    gr.Markdown(
+        "# 🎤 Interpreter\n"
+        "Two-way voice translation. Pick a language on each side, record, "
+        "and the translation is spoken to the other person."
+    )
 
     with gr.Row():
         with gr.Column():
