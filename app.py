@@ -122,11 +122,13 @@ with gr.Blocks(title="Interpreter", theme=gr.themes.Soft()) as demo:
         fn=interpret,
         inputs=[mic_a, lang_a, lang_b],
         outputs=[heard_a, translated_for_b, tts_for_b],
+        api_name=False,
     )
     mic_b.stop_recording(
         fn=interpret,
         inputs=[mic_b, lang_b, lang_a],
         outputs=[heard_b, translated_for_a, tts_for_a],
+        api_name=False,
     )
 
 
