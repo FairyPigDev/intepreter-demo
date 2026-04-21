@@ -80,7 +80,7 @@ def interpret(audio_path, source_name, target_name):
     return heard, translated, tmp.name
 
 
-with gr.Blocks(title="Interpreter") as demo:
+with gr.Blocks(title="Interpreter", theme=gr.themes.Soft()) as demo:
     gr.Markdown("# 🎤 Interpreter\nTwo-way voice translation.")
 
     with gr.Row():
@@ -119,4 +119,4 @@ with gr.Blocks(title="Interpreter") as demo:
 
 
 if __name__ == "__main__":
-    demo.launch(theme=gr.themes.Soft())
+    demo.launch()
